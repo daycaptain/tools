@@ -1,0 +1,25 @@
+#!/bin/bash
+
+string=$(echo -n $* | jq -aRs .)
+
+# The API key needs to be stored in an environment variable or an .env file
+# You can create an API key in your DayCaptain account page: https://daycaptain.com/account.html
+#
+# to load, use:
+# source /some/env/file/daycaptain.env
+# OR
+export DC_API_TOKEN='<your API key>'
+
+echo -n "Adding '$*' to DayCaptain inbox: "
+
+status=$(curl -s -o /dev/null -w "%{http_code}" \
+  'https://daycaptain.com/backlog-items' \
+  -H "Authorization: Bearer $DC_API_TOKEN" \
+  -XPOST -H 'Content-Type: application/json' \
+  -d "{\"string\":$string}")
+
+if [[ "$status" == "20"* ]]; then
+  echo 'OK'
+else
+  echo "Error: HTTP $status"
+fi
