@@ -5,6 +5,6 @@ Tooling for DayCaptain
 
 == Command line tools
 
-`todos-add`: A shell script that adds a todo to the user's inbox. Requires `curl` and `jq` (for encoding the JSON string).
+https://github.com/daycaptain/tools/blob/main/todos-add[todos-add]: A shell script that adds a todo to the user's inbox. Requires `curl` and `jq` (for encoding the JSON string).
 
 It makes sense to create a shell alias for the command line scripts, to conveniently access them, e.g. `alias tda='todos-add'`
