@@ -14,14 +14,14 @@ export DC_API_TOKEN='<your API key>'
 #####################
 
 printHelp () {
-  echo Creates a DayCaptain task in the backlog inbox, or a specitic day.
+  echo Creates a DayCaptain task in the backlog inbox, or a specitic day or week.
   printUsage
 }
 
 printUsage () {
   cat << EOF
 
-USAGE: $0 [OPTIONS] <task name>
+USAGE: todos-add [OPTIONS] <task name>
 
 OPTIONS:
     -h, --help             Show this help
