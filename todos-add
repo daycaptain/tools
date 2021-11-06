@@ -1,6 +1,6 @@
 #!/bin/bash
 
-string=$(echo -n $* | jq -aRs .)
+# Authentication
 
 # The API key needs to be stored in an environment variable or an .env file
 # You can create an API key in your DayCaptain account page: https://daycaptain.com/account.html
@@ -10,16 +10,195 @@ string=$(echo -n $* | jq -aRs .)
 # OR
 export DC_API_TOKEN='<your API key>'
 
-echo -n "Adding '$*' to DayCaptain inbox: "
 
-status=$(curl -s -o /dev/null -w "%{http_code}" \
-  'https://daycaptain.com/backlog-items' \
-  -H "Authorization: Bearer $DC_API_TOKEN" \
-  -XPOST -H 'Content-Type: application/json' \
-  -d "{\"string\":$string}")
+#####################
 
-if [[ "$status" == "20"* ]]; then
-  echo 'OK'
-else
-  echo "Error: HTTP $status"
+printHelp () {
+  echo Creates a DayCaptain task in the backlog inbox, or a specitic day.
+  printUsage
+}
+
+printUsage () {
+  cat << EOF
+
+USAGE: $0 [OPTIONS] <task name>
+
+OPTIONS:
+    -h, --help             Show this help
+    -t, --today            Add the task to today's tasks
+    -m, --tomorrow         Add the task to tomorrow's tasks
+    -d, --date=DATE        Add the task to the DATE (formatted by ISO-8601, e.g. 2021-01-31)
+    -W                     Add the task to this week
+    -w, --week=WEEK        Add the task to the WEEK (formatted by ISO-8601, e.g. 2021-W07)
+    -i, --inbox (Default)  Add the task to the backlog inbox
+EOF
+  exit 2
+}
+
+addDayTask () {
+  date=$1
+  shift
+  string=$*
+  string=${string##*( )}
+  string=${string%%*( )}
+
+  if [[ ! "$date" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]]; then
+    echo "ERROR: Date wasn't provided in ISO-8601 format"
+    printUsage
+  fi
+
+  if [[ "$string" == "" ]]; then
+    printUsage
+  fi
+
+  echo -n "Adding '$string' to DayCaptain tasks in $date: "
+
+  string=$(echo -n $string | jq -aRs .)
+  status=$(curl -s -o /dev/null -w "%{http_code}" \
+    "https://daycaptain.com/${date}/tasks" \
+    -H "Authorization: Bearer $DC_API_TOKEN" \
+    -XPOST -H 'Content-Type: application/json' \
+    -d "{\"string\":$string}")
+
+  if [[ "$status" == "20"* ]]; then
+    echo 'OK'
+    exit 0
+  else
+    echo "Error: HTTP $status"
+    exit 1
+  fi
+}
+
+addWeekTask () {
+  week=$1
+  shift
+  string=$*
+  string=${string##*( )}
+  string=${string%%*( )}
+
+  if [[ ! "$week" =~ ^[0-9]{4}-W[0-9]{2}$ ]]; then
+    echo "ERROR: Week wasn't provided in ISO-8601 format"
+    printUsage
+  fi
+
+  if [[ "$string" == "" ]]; then
+    printUsage
+  fi
+
+  echo -n "Adding '$string' to DayCaptain tasks in week $week: "
+
+  string=$(echo -n $string | jq -aRs .)
+  status=$(curl -s -o /dev/null -w "%{http_code}" \
+    "https://daycaptain.com/${week}/tasks" \
+    -H "Authorization: Bearer $DC_API_TOKEN" \
+    -XPOST -H 'Content-Type: application/json' \
+    -d "{\"string\":$string}")
+
+  if [[ "$status" == "20"* ]]; then
+    echo 'OK'
+    exit 0
+  else
+    echo "Error: HTTP $status"
+    exit 1
+  fi
+}
+
+addInboxItem () {
+  string=$*
+  string=${string##*( )}
+  string=${string%%*( )}
+
+  if [[ "$string" == "" ]]; then
+    printUsage
+  fi
+
+  echo -n "Adding '$string' to DayCaptain inbox: "
+
+  string=$(echo -n $string | jq -aRs .)
+  status=$(curl -s -o /dev/null -w "%{http_code}" \
+    'https://daycaptain.com/backlog-items' \
+    -H "Authorization: Bearer $DC_API_TOKEN" \
+    -XPOST -H 'Content-Type: application/json' \
+    -d "{\"string\":$string}")
+
+  if [[ "$status" == "20"* ]]; then
+    echo 'OK'
+    exit 0
+  else
+    echo "Error: HTTP $status"
+    exit 1
+  fi
+
+}
+
+#####################
+
+options=$(getopt -o htmd:Ww:i --long help,today,tomorrow,date:,week:,inbox -- "$@")
+if [[ $? -ne 0 ]]; then
+  printUsage
 fi
+eval set -- "$options"
+
+while true; do
+    case "$1" in
+    -h)
+        printHelp
+        ;;
+    -t)
+        shift 2
+        addDayTask $(date -I) "$@"
+        ;;
+    -m)
+        shift 2
+        addDayTask $(date -I --date='tomorrow') "$@"
+        ;;
+    -d)
+        d=$2
+        shift 3
+        addDayTask $d "$@"
+        ;;
+    -W)
+        shift 2
+        addWeekTask $(date +'%G-W%V') "$@"
+        ;;
+    -w)
+        w=$2
+        shift 3
+        addWeekTask $w "$@"
+        ;;
+    -i)
+        ;;
+    --help)
+        printHelp
+        ;;
+    --today)
+        shift 2
+        addDayTask $(date -I) "$@"
+        ;;
+    --tomorrow)
+        shift 2
+        addDayTask $(date -I --date='tomorrow') "$@"
+        ;;
+    --date)
+        d=$2
+        shift 3
+        addDayTask $d "$@"
+        ;;
+    --week)
+        w=$2
+        shift 3
+        addWeekTask $w "$@"
+        ;;
+    --)
+        shift
+        break
+        ;;
+    esac
+    shift
+done
+
+if [[ "$@" == "" ]]; then
+  printHelp
+fi
+
+addInboxItem "$@"
