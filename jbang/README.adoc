@@ -1,0 +1,18 @@
+= Running tools with JBang
+
+In order to execute these tools, you need a https://www.jbang.dev/[JBang^] installation on your system.
+All other dependencies will be downloaded for you.
+
+The scripts include a command line directive (`/usr/bin/env jbang`) to be executed directly:
+
+----
+./todos-add "My task"
+----
+
+== Native compilation
+
+You can optionally build a native executable, with the native image support:
+
+----
+jbang --native todos-add
+----
