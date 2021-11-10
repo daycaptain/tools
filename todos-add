@@ -1,204 +1,143 @@
-#!/bin/bash
+///usr/bin/env jbang "$0" "$@" ; exit $?
+// Update the Quarkus version to what you want here or run jbang with
+// `-Dquarkus.version=<version>` to override it.
+//DEPS io.quarkus:quarkus-bom:${quarkus.version:2.4.0.Final}@pom
+//DEPS io.quarkus:quarkus-picocli
+//DEPS io.quarkus:quarkus-rest-client-reactive-jackson
 
-# Authentication
+//Q:CONFIG quarkus.banner.enabled=false
+//Q:CONFIG quarkus.log.level=WARN
 
-# The API key needs to be stored in an environment variable or an .env file
-# You can create an API key in your DayCaptain account page: https://daycaptain.com/account.html
-#
-# to load, use:
-# source /some/env/file/daycaptain.env
-# OR
-export DC_API_TOKEN='<your API key>'
+//Q:CONFIG quarkus.rest-client.DayCaptain.url=https://daycaptain.com/
+//JAVAC_OPTIONS -parameters
 
+import static java.lang.String.format;
+import static java.lang.System.out;
+import static java.lang.annotation.ElementType.METHOD;
+import static java.lang.annotation.ElementType.TYPE;
 
-#####################
+import java.io.IOException;
+import java.lang.annotation.Retention;
+import java.lang.annotation.RetentionPolicy;
+import java.lang.annotation.Target;
+import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeFormatterBuilder;
+import java.time.temporal.WeekFields;
+import java.util.Date;
 
-printHelp () {
-  echo Creates a DayCaptain task in the backlog inbox, or a specitic day or week.
-  printUsage
+import javax.ws.rs.GET;
+import javax.ws.rs.HeaderParam;
+import javax.ws.rs.NameBinding;
+import javax.ws.rs.POST;
+import javax.ws.rs.Path;
+import javax.ws.rs.PathParam;
+import javax.ws.rs.container.ContainerRequestContext;
+import javax.ws.rs.container.ContainerRequestFilter;
+import javax.ws.rs.ext.Provider;
+
+import org.eclipse.microprofile.rest.client.annotation.RegisterProvider;
+import org.eclipse.microprofile.rest.client.inject.RegisterRestClient;
+import org.eclipse.microprofile.rest.client.inject.RestClient;
+
+import picocli.CommandLine;
+import picocli.CommandLine.Command;
+import picocli.CommandLine.ITypeConverter;
+import picocli.CommandLine.Option;
+import picocli.CommandLine.Parameters;
+
+@CommandLine.Command(name = "todos-add", mixinStandardHelpOptions = true)
+public class TodosAdd {
+
+    @RestClient
+    DayCaptain captain;
+
+    @Option(names="--token", defaultValue = "${DC_API_TOKEN}", required = true)
+    String token;
+
+    String token() {
+        return "Bearer " + token;
+    }
+
+    @Command(description = "Add the task to today's tasks")
+    int today(String task) {
+        return date(LocalDate.now(), task);
+    }
+
+    @Command(description = "Add the task to tomorrow's tasks")
+    int tomorrow(String task) {
+        return date(LocalDate.now().plusDays(1), task);
+    }
+
+    @Command(description = "Add the task to the DATE (formatted by ISO-8601, e.g. 2021-01-31")
+    int date(@Parameters LocalDate date, String task) {
+        out.println(format("Adding '%s' to DayCaptain tasks in %s: ", task, date));
+        captain.addDayTask(token(), date.toString(), new Task(task));
+        out.println("OK");
+        return 0;
+    }
+
+    @Command(description = "Add the task to this week")
+    int w(String task) {
+        return week(LocalDate.now(), task);
+    }
+
+    @Command(description = "Add the task to the WEEK")
+    int week(@Parameters(converter = ISO8691Week.class) LocalDate week, String task) {
+        String humanWeek = week.format(ISO8691Week.weekFormat);
+        out.println(format("Adding '%s' to DayCaptain tasks in week %s: ", task, humanWeek));
+        captain.addDayTask(token(), humanWeek, new Task(task));
+        out.println("OK");
+        return 0;
+    }
+
+    @Command(description = "Add the task to the backlog inbox")
+    int inbox(@Parameters() String task) {
+        out.println(format("Adding '%s' to DayCaptain inbox: ", task));
+        captain.addInboxItem(token(), new Task(task));
+        out.println("OK");
+        return 0;
+    };
+
+    
 }
 
-printUsage () {
-  cat << EOF
+class Task {
+    public String string;
 
-USAGE: todos-add [OPTIONS] <task name>
-
-OPTIONS:
-    -h, --help             Show this help
-    -t, --today            Add the task to today's tasks
-    -m, --tomorrow         Add the task to tomorrow's tasks
-    -d, --date=DATE        Add the task to the DATE (formatted by ISO-8601, e.g. 2021-01-31)
-    -W                     Add the task to this week
-    -w, --week=WEEK        Add the task to the WEEK (formatted by ISO-8601, e.g. 2021-W07)
-    -i, --inbox (Default)  Add the task to the backlog inbox
-EOF
-  exit 2
+    public Task(String string) {
+        this.string=string;
+    }
 }
 
-addDayTask () {
-  date=$1
-  shift
-  string=$*
-  string=${string##*( )}
-  string=${string%%*( )}
+@RegisterRestClient
+//@RegisterProvider(LoggingFilter.class)
+interface DayCaptain {
 
-  if [[ ! "$date" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]]; then
-    echo "ERROR: Date wasn't provided in ISO-8601 format"
-    printUsage
-  fi
+    @POST
+    @Path("/backlog-items")
+    void addInboxItem(@HeaderParam("Authorization") String auth, Task task);
 
-  if [[ "$string" == "" ]]; then
-    printUsage
-  fi
+    @POST
+    @Path("/{date}/tasks")
+    void addDayTask(@HeaderParam("Authorization") String auth, @PathParam("date") String date, Task task);
 
-  echo -n "Adding '$string' to DayCaptain tasks in $date: "
-
-  string=$(echo -n $string | jq -aRs .)
-  status=$(curl -s -o /dev/null -w "%{http_code}" \
-    "https://daycaptain.com/${date}/tasks" \
-    -H "Authorization: Bearer $DC_API_TOKEN" \
-    -XPOST -H 'Content-Type: application/json' \
-    -d "{\"string\":$string}")
-
-  if [[ "$status" == "20"* ]]; then
-    echo 'OK'
-    exit 0
-  else
-    echo "Error: HTTP $status"
-    exit 1
-  fi
-}
-
-addWeekTask () {
-  week=$1
-  shift
-  string=$*
-  string=${string##*( )}
-  string=${string%%*( )}
-
-  if [[ ! "$week" =~ ^[0-9]{4}-W[0-9]{2}$ ]]; then
-    echo "ERROR: Week wasn't provided in ISO-8601 format"
-    printUsage
-  fi
-
-  if [[ "$string" == "" ]]; then
-    printUsage
-  fi
-
-  echo -n "Adding '$string' to DayCaptain tasks in week $week: "
-
-  string=$(echo -n $string | jq -aRs .)
-  status=$(curl -s -o /dev/null -w "%{http_code}" \
-    "https://daycaptain.com/${week}/tasks" \
-    -H "Authorization: Bearer $DC_API_TOKEN" \
-    -XPOST -H 'Content-Type: application/json' \
-    -d "{\"string\":$string}")
-
-  if [[ "$status" == "20"* ]]; then
-    echo 'OK'
-    exit 0
-  else
-    echo "Error: HTTP $status"
-    exit 1
-  fi
-}
-
-addInboxItem () {
-  string=$*
-  string=${string##*( )}
-  string=${string%%*( )}
-
-  if [[ "$string" == "" ]]; then
-    printUsage
-  fi
-
-  echo -n "Adding '$string' to DayCaptain inbox: "
-
-  string=$(echo -n $string | jq -aRs .)
-  status=$(curl -s -o /dev/null -w "%{http_code}" \
-    'https://daycaptain.com/backlog-items' \
-    -H "Authorization: Bearer $DC_API_TOKEN" \
-    -XPOST -H 'Content-Type: application/json' \
-    -d "{\"string\":$string}")
-
-  if [[ "$status" == "20"* ]]; then
-    echo 'OK'
-    exit 0
-  else
-    echo "Error: HTTP $status"
-    exit 1
-  fi
+    @POST
+    @Path("/{week}/tasks")
+    void addWeekTask(@HeaderParam("Authorization") String auth, @PathParam("week") String week, Task task);
 
 }
 
-#####################
+class ISO8691Week implements ITypeConverter<LocalDate> {
+    static DateTimeFormatter weekFormat = new DateTimeFormatterBuilder().appendPattern("YYYY-'W'w")
+    .parseDefaulting(WeekFields.ISO.dayOfWeek(), 1)
+    .toFormatter();
 
-options=$(getopt -o htmd:Ww:i --long help,today,tomorrow,date:,week:,inbox -- "$@")
-if [[ $? -ne 0 ]]; then
-  printUsage
-fi
-eval set -- "$options"
+    @Override
+    public LocalDate convert(String value) throws Exception {
+        LocalDate result = LocalDate.parse(value, 
+        weekFormat);
 
-while true; do
-    case "$1" in
-    -h)
-        printHelp
-        ;;
-    -t)
-        shift 2
-        addDayTask $(date -I) "$@"
-        ;;
-    -m)
-        shift 2
-        addDayTask $(date -I --date='tomorrow') "$@"
-        ;;
-    -d)
-        d=$2
-        shift 3
-        addDayTask $d "$@"
-        ;;
-    -W)
-        shift 2
-        addWeekTask $(date +'%G-W%V') "$@"
-        ;;
-    -w)
-        w=$2
-        shift 3
-        addWeekTask $w "$@"
-        ;;
-    -i)
-        ;;
-    --help)
-        printHelp
-        ;;
-    --today)
-        shift 2
-        addDayTask $(date -I) "$@"
-        ;;
-    --tomorrow)
-        shift 2
-        addDayTask $(date -I --date='tomorrow') "$@"
-        ;;
-    --date)
-        d=$2
-        shift 3
-        addDayTask $d "$@"
-        ;;
-    --week)
-        w=$2
-        shift 3
-        addWeekTask $w "$@"
-        ;;
-    --)
-        shift
-        break
-        ;;
-    esac
-    shift
-done
-
-if [[ "$@" == "" ]]; then
-  printHelp
-fi
-
-addInboxItem "$@"
+        return result;
+    }
+}
