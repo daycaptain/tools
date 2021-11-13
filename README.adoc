@@ -7,7 +7,7 @@ Tooling for DayCaptain
 
 _There are two different command line tool technologies available, to support as many systems as possible: a Bash script and a https://www.jbang.dev/[JBang^] version._
 
-https://github.com/daycaptain/tools/blob/main/todos-add[todos-add]: A shell script that adds a todo to the user's inbox or a specific day or week.
+`todos-add`: A shell script that adds a todo to the user's inbox or a specific day or week.
 
 It makes sense to create a shell alias for the command line scripts, to conveniently access them, + 
 e.g. `alias tda='todos-add'`
