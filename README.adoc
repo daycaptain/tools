@@ -14,3 +14,34 @@ e.g. `alias tda='todos-add'`
 
 Have a look at both versions in the `jbang/` and `bash/` folder.
 The Bash version requires `curl`, `jq`, and `getopt`, the JBang version requires only a JBang installation.
+
+=== Bash
+
+Usage and examples:
+
+----
+USAGE:
+    todos-add [OPTIONS] <task name>
+                           Creates a task with <task name>
+    todos-add [OPTIONS] -
+                           Reads the task names from stdin. Multiple lines result in separate tasks.
+
+OPTIONS:
+    -h, --help             Show this help
+    -t, --today            Add the task to today's tasks
+    -m, --tomorrow         Add the task to tomorrow's tasks
+    -d, --date=DATE        Add the task to the DATE (formatted by ISO-8601, e.g. 2021-01-31)
+    -W                     Add the task to this week
+    -w, --week=WEEK        Add the task to the WEEK (formatted by ISO-8601, e.g. 2021-W07)
+    -i, --inbox (Default)  Add the task to the backlog inbox
+
+EXAMPLES:
+    todos-add hello world
+                           Creates a task 'hello world' in the backlog inbox
+    todos-add -t hello world
+                           Creates a task 'hello world' in today's task list
+    todos-add -d 2022-01-01 hello world
+                           Creates a task 'hello world' in the task list of Jan 1st, 2022
+    cat todos.txt | todos-add -
+                           Creates a task in the backlog inbox for each line in the todos.txt file
+----
