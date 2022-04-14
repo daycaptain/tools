@@ -21,7 +21,11 @@ printHelp () {
 printUsage () {
   cat << EOF
 
-USAGE: todos-add [OPTIONS] <task name>
+USAGE:
+    todos-add [OPTIONS] <task name>
+                           Creates a task with <task name>
+    todos-add [OPTIONS] -
+                           Reads the task names from stdin. Multiple lines result in separate tasks.
 
 OPTIONS:
     -h, --help             Show this help
@@ -31,6 +35,16 @@ OPTIONS:
     -W                     Add the task to this week
     -w, --week=WEEK        Add the task to the WEEK (formatted by ISO-8601, e.g. 2021-W07)
     -i, --inbox (Default)  Add the task to the backlog inbox
+
+EXAMPLES:
+    todos-add hello world
+                           Creates a task 'hello world' in the backlog inbox
+    todos-add -t hello world
+                           Creates a task 'hello world' in today's task list
+    todos-add -d 2022-01-01 hello world
+                           Creates a task 'hello world' in the task list of Jan 1st, 2022
+    cat todos.txt | todos-add -
+                           Creates a task in the backlog inbox for each line in the todos.txt file
 EOF
   exit 2
 }
@@ -51,6 +65,19 @@ addDayTask () {
     printUsage
   fi
 
+  if [[ "$string" == "-" ]]; then
+    while IFS='$\n' read -r line; do
+      __addDayTask "$date" "$line"
+    done
+  else
+    __addDayTask "$date" "$string"
+  fi
+  exit 0
+}
+
+__addDayTask () {
+  date=$1
+  string=$2
   echo -n "Adding '$string' to DayCaptain tasks in $date: "
 
   string=$(echo -n $string | jq -aRs .)
@@ -62,7 +89,6 @@ addDayTask () {
 
   if [[ "$status" == "20"* ]]; then
     echo 'OK'
-    exit 0
   else
     echo "Error: HTTP $status"
     exit 1
@@ -85,6 +111,19 @@ addWeekTask () {
     printUsage
   fi
 
+  if [[ "$string" == "-" ]]; then
+    while IFS='$\n' read -r line; do
+      __addWeekTask "$week" "$line"
+    done
+  else
+    __addWeekTask "$week" "$string"
+  fi
+  exit 0
+}
+
+__addWeekTask () {
+  week=$1
+  string=$2
   echo -n "Adding '$string' to DayCaptain tasks in week $week: "
 
   string=$(echo -n $string | jq -aRs .)
@@ -96,7 +135,6 @@ addWeekTask () {
 
   if [[ "$status" == "20"* ]]; then
     echo 'OK'
-    exit 0
   else
     echo "Error: HTTP $status"
     exit 1
@@ -112,6 +150,19 @@ addInboxItem () {
     printUsage
   fi
 
+  if [[ "$string" == "-" ]]; then
+    while IFS='$\n' read -r line; do
+      __addInboxItem "$line"
+    done
+  else
+    __addInboxItem "$string"
+  fi
+  exit 0
+}
+
+__addInboxItem() {
+  string=$1
+
   echo -n "Adding '$string' to DayCaptain inbox: "
 
   string=$(echo -n $string | jq -aRs .)
@@ -123,12 +174,10 @@ addInboxItem () {
 
   if [[ "$status" == "20"* ]]; then
     echo 'OK'
-    exit 0
   else
     echo "Error: HTTP $status"
     exit 1
   fi
-
 }
 
 #####################
